@@ -10,4 +10,4 @@ score_from_strings.inputs = %inputs_filename
 score_from_strings.targets  = %targets_filename
 score_from_strings.scores_filename = %scores_filename
 
-tpu_estimator_model_fn.score_in_predict_mode = True
+utils.run.score_in_predict_mode = True
