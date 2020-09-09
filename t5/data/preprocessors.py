@@ -2503,3 +2503,82 @@ def preprocess_tsv(dataset,
             'targets': _format(targets_format, field_values)}
   return dataset.map(
       _parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+def tokenize(dataset,
+             output_features,
+             keys=('inputs', 'targets'),
+             vocab_key='targets',
+             **unused_kwargs):
+  """Tokenize the given keys, using the vocabulary for vocab_key.
+
+  Args:
+    dataset: A tf.data.Dataset to process.
+    output_features: a dict mapping feature name to t5.data.Feature.
+    keys: a list of strings
+    vocab_key: a string
+
+  Returns:
+    A preprocessed tf.data.Dataset.
+  """
+  def my_fn(features):
+    """Map function."""
+    for k in keys:
+      features[k] = tf.cast(
+          output_features[vocab_key].vocabulary.encode_tf(features[k]),
+          tf.int64)
+    return features
+  return dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
+
+
+def concatenate(dataset,
+                output_features,
+                input_keys=('inputs', 'targets'),
+                output_key='targets',
+                delete_parts=True,
+                **unused_kwargs):
+  """Concatenate several fields into one.
+
+  Args:
+    dataset: A tf.data.Dataset to process.
+    output_features: a dict mapping feature name to t5.data.Feature.
+    input_keys: a list of strings
+    output_key: a string
+    delete_parts: a boolean
+
+  Returns:
+    A preprocessed tf.data.Dataset.
+  """
+  del output_features
+  def my_fn(features):
+    """Map function."""
+    parts = [features[k] for k in input_keys]
+    if delete_parts:
+      for k in input_keys:
+        del features[k]
+    features[output_key] = tf.concat(parts, 0)
+    return features
+  return dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
+
+
+def negate(dataset,
+           output_features,
+           keys,
+           **unused_kwargs):
+  """Negate one or more fields.
+
+  Args:
+    dataset: A tf.data.Dataset to process.
+    output_features: a dict mapping feature name to t5.data.Feature.
+    keys: a list of strings
+
+  Returns:
+    A preprocessed tf.data.Dataset.
+  """
+  del output_features
+  def my_fn(features):
+    """Map function."""
+    for k in keys:
+      features[k] = -features[k]
+    return features
+  return dataset.map(my_fn, num_parallel_calls=num_parallel_calls())

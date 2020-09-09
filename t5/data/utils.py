@@ -370,6 +370,7 @@ class Task(DatasetProviderBase):
                metric_fns=None,
                postprocess_fn=None,
                token_preprocessor=None,
+               combined_preprocessor=None,
                output_features=None,
                num_input_examples=None,
                supports_caching=True,
@@ -407,6 +408,9 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
+      combined_preprocessor: an optional function (or list of functions) that
+        (each) takes in a tf.data.Dataset and returns a tf.data.Dataset
+        If present, text_preprocessor and token_preprocessor should be None.
       output_features: dict(str, Feature), list(str), Feature, or None. Output
         features of the Task. If list(str) is provided, a default `Feature` will
         be constructed for each provided feature name. If a `Feature` is
@@ -432,10 +436,22 @@ class Task(DatasetProviderBase):
 
     self._name = name
     self._dataset_fn = dataset_fn
-    self._text_preprocessor = (
-        [] if text_preprocessor is None else text_preprocessor)
-    self._token_preprocessor = (
-        [] if token_preprocessor is None else token_preprocessor)
+    if combined_preprocessor:
+      if text_preprocessor or token_preprocessor:
+        raise ValueError(
+            "combined preprocessor cannot be combined with "
+            "text_preprocessor or token_preprocessor task=%s" % name)
+      if supports_caching:
+        raise ValueError(
+            "caching not supported with combined_preprocessor task=%s" % name)
+      self._token_preprocessor = combined_preprocessor
+      self.use_combined_preprocessor = True
+    else:
+      self.use_combined_preprocessor = False
+      self._text_preprocessor = (
+          [] if text_preprocessor is None else text_preprocessor)
+      self._token_preprocessor = (
+          [] if token_preprocessor is None else token_preprocessor)
     self._metric_fns = metric_fns
     # Use a pass-through if postprocess_fn is not provided
     self._postprocess_fn = (
@@ -710,12 +726,13 @@ class Task(DatasetProviderBase):
       ds = self._get_cached_dataset(split, shuffle)
     else:
       ds = self._dataset_fn(split=split, shuffle_files=shuffle)
-      ds = self.preprocess_text(ds)
-      ds = maybe_print_dataset(ds)
-      # Tokenize
-      ds = encode_string_features(
-          ds, self.output_features, keys=self.output_features,
-          copy_plaintext=copy_plaintext)
+      if not self.use_combined_preprocessor:
+        ds = self.preprocess_text(ds)
+        ds = maybe_print_dataset(ds)
+        # Tokenize
+        ds = encode_string_features(
+            ds, self.output_features, keys=self.output_features,
+            copy_plaintext=copy_plaintext)
 
     if (not use_cached and self.num_input_examples(split) and
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
